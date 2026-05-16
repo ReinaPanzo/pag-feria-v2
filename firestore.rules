@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 0.1 Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'reina_panzo_isc@zongolica.tecnm.mx';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 1. Validation Blueprints
+    function isValidEvent(data) {
+      return data.keys().hasAll(['title', 'date', 'location', 'category'])
+        && data.title is string && data.title.size() <= 200
+        && data.description is string && data.description.size() <= 5000
+        && data.date is timestamp
+        && data.location is string
+        && data.category is string
+        && (data.get('imageUrl', null) == null || (data.imageUrl is string && data.imageUrl.size() <= 1024))
+        && (data.get('isFeatured', null) == null || data.isFeatured is bool);
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name'])
+        && data.name is string && data.name.size() <= 50
+        && (data.get('icon', null) == null || (data.icon is string && data.icon.size() <= 50))
+        && (data.get('color', null) == null || (data.color is string && data.color.size() <= 30));
+    }
+
+    function isValidLocation(data) {
+      return data.keys().hasAll(['name'])
+        && data.name is string && data.name.size() <= 100
+        && (data.get('address', null) == null || (data.address is string && data.address.size() <= 255));
+    }
+
+    // 2. Collection Rules
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(eventId) && isValidEvent(incoming());
+      allow update: if isAdmin() && isValidId(eventId) && isValidEvent(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
+      allow update: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /locations/{locationId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(locationId) && isValidLocation(incoming());
+      allow update: if isAdmin() && isValidId(locationId) && isValidLocation(incoming());
+      allow delete: if isAdmin();
+    }
+    
+    // Internal Connectivity Test
+    match /_internal/connectivity_test {
+      allow read: if true;
+    }
+  }
+}

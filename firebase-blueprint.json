@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "Event": {
+      "title": "Feria Event",
+      "description": "Details of a specific event in the fair",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Name of the event" },
+        "description": { "type": "string", "description": "Full description of the activity" },
+        "date": { "type": "string", "format": "date-time", "description": "When the event starts" },
+        "location": { "type": "string", "description": "Id or name of the location" },
+        "category": { "type": "string", "description": "Category id (e.g. music, culture)" },
+        "imageUrl": { "type": "string", "description": "URL to the promotional image" },
+        "isFeatured": { "type": "boolean", "description": "Whether it appears on the home highlights" }
+      },
+      "required": ["title", "date", "category", "location"]
+    },
+    "Category": {
+      "title": "Event Category",
+      "description": "Grouping for events",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "icon": { "type": "string", "description": "Lucide icon name" },
+        "color": { "type": "string", "description": "Tailwind color class" }
+      },
+      "required": ["name"]
+    },
+    "Location": {
+      "title": "Fair Venue",
+      "description": "Physical place where events happen",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "coordinates": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        }
+      },
+      "required": ["name"]
+    }
+  },
+  "firestore": {
+    "events": {
+      "schema": "Event",
+      "description": "Core collection for the fair schedule"
+    },
+    "categories": {
+      "schema": "Category",
+      "description": "Event classifications"
+    },
+    "locations": {
+      "schema": "Location",
+      "description": "Venues across the municipality"
+    }
+  }
+}

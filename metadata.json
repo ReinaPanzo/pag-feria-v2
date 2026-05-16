@@ -1,0 +1,12 @@
+{
+  "name": "Feria de Tehuipango 2026",
+  "description": "Plataforma oficial para la gestión y difusión de la Feria de Tehuipango 2026. Permite a los ciudadanos consultar el calendario de eventos en tiempo real y a los administradores gestionar la cartelera de forma segura.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API",
+    "Firebase Authentication",
+    "Cloud Firestore",
+    "Tailwind CSS",
+    "Framer Motion"
+  ]
+}
