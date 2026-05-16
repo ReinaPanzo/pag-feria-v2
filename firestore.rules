@@ -16,7 +16,11 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isEmailVerified() && request.auth.token.email == 'reina_panzo_isc@zongolica.tecnm.mx';
+      return isEmailVerified() && (
+        request.auth.token.email == 'reina_panzo_isc@zongolica.tecnm.mx' || 
+        request.auth.token.email == 'reina_panzo_isc@tehuipango.gob.mx' ||
+        request.auth.token.email == 'fctprogramer.2021@gmail.com'
+      );
     }
 
     function isValidId(id) {

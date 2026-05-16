@@ -35,7 +35,10 @@ export const AdminPanel: React.FC = () => {
     return () => { unsub(); unsubEvents(); };
   }, []);
 
-  const isAdmin = user?.email === 'reina_panzo_isc@tehuipango.gob.mx' || user?.email === 'reina_panzo_isc@zongolica.tecnm.mx';
+  const isAdmin = 
+    user?.email === 'reina_panzo_isc@tehuipango.gob.mx' || 
+    user?.email === 'reina_panzo_isc@zongolica.tecnm.mx' ||
+    user?.email === 'fctprogramer.2021@gmail.com';
 
   if (!isAdmin) return null;
 

@@ -23,7 +23,10 @@ export const Navbar: React.FC = () => {
 
   const logout = () => signOut(auth);
 
-  const isAdmin = user?.email === 'reina_panzo_isc@zongolica.tecnm.mx';
+  const isAdmin = 
+    user?.email === 'reina_panzo_isc@zongolica.tecnm.mx' || 
+    user?.email === 'reina_panzo_isc@tehuipango.gob.mx' ||
+    user?.email === 'fctprogramer.2021@gmail.com';
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-brand-cream/80 backdrop-blur-md border-b border-neutral-200">
