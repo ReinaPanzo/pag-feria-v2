@@ -69,8 +69,11 @@ export interface EventEntity {
   description: string;
   date: Date;
   location: string;
+  latitude?: number;
+  longitude?: number;
   category: string;
   imageUrl?: string;
+  imageName?: string;
   isFeatured?: boolean;
 }
 

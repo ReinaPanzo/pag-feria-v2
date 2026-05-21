@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '@/src/lib/firebase';
 import { EventEntity, EventService, CategoryService, CategoryEntity } from '@/src/services/eventService';
-import { Plus, Trash2, Edit3, X, Image as ImageIcon, Save, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Image as ImageIcon, Save, AlertCircle, MapPinned } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
+import { MapPin } from 'lucide-react';
+import { storage } from '@/src/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+
 
 export const AdminPanel: React.FC = () => {
   const [user, setUser] = useState(auth.currentUser);
@@ -12,21 +18,70 @@ export const AdminPanel: React.FC = () => {
   const [isAddingCategoryMode, setIsAddingCategoryMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+const [imagePreview, setImagePreview] = useState('');
+
   
   const [newEvent, setNewEvent] = useState<Omit<EventEntity, 'id'>>({
-    title: '',
-    description: '',
-    date: new Date(),
-    location: '',
-    category: '',
-    imageUrl: '',
-    isFeatured: false
-  });
+  title: '',
+  description: '',
+  date: new Date(),
+  location: '',
+latitude: undefined,
+longitude: undefined,
+  category: '',
+  imageUrl: '',
+  isFeatured: false
+});
 
   const loadCategories = async () => {
     const cats = await CategoryService.getCategories();
     setCategories(cats);
   };
+
+  
+
+
+//COORDENADAS
+
+const [mapOpen, setMapOpen] = useState(false);
+
+const [mapCenter] = useState({
+  lat: 18.517724,
+  lng: -97.055858
+});
+
+const [mapCoords, setMapCoords] = useState({
+  lat: 18.517724,
+  lng: -97.055858
+});
+
+
+
+
+const { isLoaded, loadError } = useLoadScript({
+  id: 'google-map-script',
+  googleMapsApiKey: "AIzaSyAQesMl2qYC75Ss8rfpVo9tJKObB4lAs1c",
+  libraries: ['places']
+});
+
+
+
+
+//IMAGEN
+
+const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+
+  if (!file) return;
+
+  setSelectedImage(file);
+  setImagePreview(URL.createObjectURL(file));
+};
+
+
+
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(u => setUser(u));
@@ -42,28 +97,77 @@ export const AdminPanel: React.FC = () => {
 
   if (!isAdmin) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      await EventService.addEvent(newEvent);
-      setNewEvent({
-        title: '',
-        description: '',
-        date: new Date(),
-        location: '',
-        category: '',
-        imageUrl: '',
-        isFeatured: false
-      });
-      setIsAddingMode(false);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsSubmitting(true);
 
+  let imageUrl = "";
+  let imageName = "";
+
+  try {
+    // Intentar subir imagen, pero si falla NO detener
+    if (selectedImage) {
+      try {
+        imageName = `${Date.now()}-${selectedImage.name.replace(/\s+/g, "_")}`;
+        const imageRef = ref(storage, `eventos/${imageName}`);
+
+        await uploadBytes(imageRef, selectedImage);
+        imageUrl = await getDownloadURL(imageRef);
+
+      } catch (imageError) {
+        console.warn("No se pudo subir la imagen, se guardará el evento sin imagen:", imageError);
+
+        imageUrl = "";
+        imageName = "";
+      }
+    }
+
+    const eventToSave: any = {
+      title: newEvent.title,
+      description: newEvent.description,
+      date: newEvent.date,
+      location: newEvent.location,
+      category: newEvent.category,
+      isFeatured: newEvent.isFeatured ?? false
+    };
+
+    if (newEvent.latitude !== undefined) {
+      eventToSave.latitude = newEvent.latitude;
+    }
+
+    if (newEvent.longitude !== undefined) {
+      eventToSave.longitude = newEvent.longitude;
+    }
+
+    if (imageUrl) {
+  eventToSave.imageUrl = imageUrl;
+  eventToSave.imageName = imageName;
+}
+
+    await EventService.addEvent(eventToSave);
+
+    setNewEvent({
+      title: '',
+      description: '',
+      date: new Date(),
+      location: '',
+      latitude: undefined,
+      longitude: undefined,
+      category: '',
+      imageUrl: '',
+      isFeatured: false
+    });
+
+    setSelectedImage(null);
+    setImagePreview('');
+    setIsAddingMode(false);
+
+  } catch (err) {
+    console.error("Error guardando evento:", err);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
@@ -85,6 +189,46 @@ export const AdminPanel: React.FC = () => {
       await EventService.deleteEvent(id);
     }
   };
+
+
+
+  //obtiene el nombre del lugar a partir de las coordenadas usando la API de Google Maps Geocoding
+const GOOGLE_MAPS_KEY = "AIzaSyAQesMl2qYC75Ss8rfpVo9tJKObB4lAs1c";
+  const getPlaceName = async (lat: number, lng: number) => {
+  try {
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_KEY}`
+    );
+
+    const data = await response.json();
+
+    if (data.results && data.results.length > 0) {
+     const components = data.results[0].address_components;
+
+const localidad =
+  components.find((c: any) => c.types.includes("locality"))?.long_name ||
+  components.find((c: any) => c.types.includes("sublocality"))?.long_name ||
+  components.find((c: any) => c.types.includes("administrative_area_level_3"))?.long_name ||
+  components.find((c: any) => c.types.includes("administrative_area_level_2"))?.long_name ||
+  data.results[0].formatted_address;
+
+setNewEvent(prev => ({
+  ...prev,
+  location: localidad,
+  latitude: lat,
+  longitude: lng
+}));
+    }
+
+
+
+  } catch (error) {
+    console.error("Error obteniendo dirección:", error);
+  }
+};
+
+
+
 
   return (
     <section id="admin" className="py-24 px-4 bg-brand-blue/[0.03]">
@@ -167,14 +311,14 @@ export const AdminPanel: React.FC = () => {
         {/* Add Event Modal */}
         <AnimatePresence>
           {isAddingMode && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 overflow-y-auto">
               <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm"
                 onClick={() => setIsAddingMode(false)}
               />
               <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
                 className="bg-white rounded-[40px] w-full max-w-2xl overflow-hidden shadow-2xl relative z-10"
               >
                 <div className="p-10">
@@ -219,7 +363,7 @@ export const AdminPanel: React.FC = () => {
                       <label className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Descripción</label>
                       <textarea 
                         required
-                        rows={4}
+                        rows={2}
                         className="w-full px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
                         value={newEvent.description}
                         onChange={e => setNewEvent({...newEvent, description: e.target.value})}
@@ -236,32 +380,79 @@ export const AdminPanel: React.FC = () => {
                           onChange={e => setNewEvent({...newEvent, date: new Date(e.target.value)})}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Lugar</label>
-                        <input 
-                          required
-                          className="w-full px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
-                          value={newEvent.location}
-                          onChange={e => setNewEvent({...newEvent, location: e.target.value})}
-                        />
-                      </div>
+                     
+                     
+                     <div className="space-y-2">
+<div className="space-y-2">
+  <label className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">
+    Lugar
+  </label>
+
+  <div className="flex gap-2">
+    <input
+      required
+      className="w-full px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl"
+      value={newEvent.location}
+      onChange={e =>
+        setNewEvent({ ...newEvent, location: e.target.value })
+      }
+    />
+
+   <button
+  type="button"
+  onClick={() => setMapOpen(true)}
+  className="w-12 h-12 bg-brand-blue text-white rounded-2xl flex items-center justify-center"
+>
+  <MapPinned size={20} color="white" />
+</button>
+  </div>
+
+  {newEvent.latitude && newEvent.longitude && (
+    <p className="text-xs text-green-600">
+      Ubicación seleccionada en el mapa
+    </p>
+  )}
+</div>
+</div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">URL de Imagen</label>
-                      <div className="flex gap-2">
-                        <input 
-                          type="url"
-                          placeholder="https://..."
-                          className="w-full px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
-                          value={newEvent.imageUrl}
-                          onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})}
-                        />
-                        <div className="w-12 h-12 bg-neutral-100 rounded-2xl flex items-center justify-center text-neutral-400">
-                          <ImageIcon size={20} />
-                        </div>
-                      </div>
-                    </div>
+                  <div className="space-y-2">
+  <label className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">
+    Imagen del Evento
+  </label>
+
+  <div className="flex gap-2">
+    <input
+      type="file"
+      accept="image/*"
+      onChange={handleImageSelect}
+      className="hidden"
+      id="event-image"
+    />
+
+    <label
+      htmlFor="event-image"
+      className="w-full px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl cursor-pointer text-neutral-500"
+    >
+      {selectedImage ? selectedImage.name : 'Seleccionar imagen'}
+    </label>
+
+    <label
+      htmlFor="event-image"
+      className="w-12 h-12 bg-neutral-100 rounded-2xl flex items-center justify-center text-neutral-400 cursor-pointer"
+    >
+      <ImageIcon size={20} />
+    </label>
+  </div>
+
+  {imagePreview && (
+    <img
+      src={imagePreview}
+      alt="Vista previa"
+      className="w-full h-40 object-cover rounded-2xl border border-neutral-100"
+    />
+  )}
+</div>
 
                     <div className="flex items-center gap-2">
                       <input 
@@ -301,16 +492,18 @@ export const AdminPanel: React.FC = () => {
         {/* Add Category Modal */}
         <AnimatePresence>
           {isAddingCategoryMode && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+           <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 overflow-y-auto">
               <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm"
                 onClick={() => setIsAddingCategoryMode(false)}
               />
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl relative z-10"
-              >
+ <motion.div 
+  initial={{ scale: 0.9, opacity: 0 }}
+  animate={{ scale: 1, opacity: 1 }}
+  exit={{ scale: 0.9, opacity: 0 }}
+  className="bg-white rounded-[40px] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative z-10"
+>
                 <div className="p-8">
                   <div className="flex justify-between items-start mb-6">
                     <div>
@@ -357,8 +550,92 @@ export const AdminPanel: React.FC = () => {
               </motion.div>
             </div>
           )}
-        </AnimatePresence>
+      </AnimatePresence>
+
+{/* Modal Mapa */}
+{mapOpen && (
+  <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center p-4">
+    <div className="bg-white w-full max-w-4xl h-[80vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+
+      <div className="p-4 flex items-center justify-between border-b">
+        <div>
+          <h3 className="text-xl font-bold text-neutral-800">Seleccionar ubicación</h3>
+          <p className="text-sm text-neutral-500">
+            Da clic en el mapa para guardar las coordenadas.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setMapOpen(false)}
+          className="p-2 hover:bg-neutral-100 rounded-full"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+     <div className="flex-1">
+
+  {loadError && (
+    <div className="w-full h-full flex items-center justify-center text-red-600 font-bold">
+      Error cargando Google Maps
+    </div>
+  )}
+
+  {!loadError && isLoaded ? (
+  <GoogleMap
+    center={mapCenter}
+    zoom={15}
+    mapContainerStyle={{ width: "100%", height: "100%" }}
+    onClick={(e) => {
+      const lat = e.latLng?.lat();
+      const lng = e.latLng?.lng();
+
+      if (lat == null || lng == null) return;
+
+      setMapCoords({ lat, lng });
+
+      getPlaceName(lat, lng);
+    }}
+  >
+    <Marker position={mapCoords} />
+  </GoogleMap>
+  ) : (
+    !loadError && (
+      <div className="w-full h-full flex items-center justify-center text-neutral-500">
+        Cargando mapa...
+      </div>
+    )
+  )}
+
+</div>
+
+      <div className="p-4 flex justify-between items-center border-t">
+        <div className="text-sm text-neutral-500">
+          Lat: {newEvent.latitude ?? '---'} | Lng: {newEvent.longitude ?? '---'}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setMapOpen(false)}
+          className="bg-brand-blue text-white px-5 py-2 rounded-xl"
+        >
+          Guardar ubicación
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
       </div>
     </section>
   );
+     
+
+
+
+
+
+
+
 };

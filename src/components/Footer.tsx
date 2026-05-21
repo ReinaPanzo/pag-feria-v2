@@ -57,6 +57,11 @@ export const Footer: React.FC = () => {
         <p className="flex items-center gap-1">
           Hecho con <Heart size={12} className="text-red-500 fill-red-500" /> para la Sierra
         </p>
+
+
+        <p className="flex items-center gap-1">
+          Desarrollado por <span className="font-bold">IDEE Tecnologías</span>
+        </p>
       </div>
     </footer>
   );
