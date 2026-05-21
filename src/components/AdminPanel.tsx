@@ -4,6 +4,20 @@ import { EventEntity, EventService, CategoryService, CategoryEntity } from '@/sr
 import { Plus, Trash2, Edit3, X, Image as ImageIcon, Save, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+const formatLocalDateTime = (date: Date) => {
+  try {
+    const pad = (num: number) => String(num).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    const MM = pad(date.getMonth() + 1);
+    const dd = pad(date.getDate());
+    const hh = pad(date.getHours());
+    const mm = pad(date.getMinutes());
+    return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
+  } catch (e) {
+    return '';
+  }
+};
+
 export const AdminPanel: React.FC = () => {
   const [user, setUser] = useState(auth.currentUser);
   const [events, setEvents] = useState<EventEntity[]>([]);
@@ -12,6 +26,9 @@ export const AdminPanel: React.FC = () => {
   const [isAddingCategoryMode, setIsAddingCategoryMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   
   const [newEvent, setNewEvent] = useState<Omit<EventEntity, 'id'>>({
     title: '',
@@ -42,11 +59,64 @@ export const AdminPanel: React.FC = () => {
 
   if (!isAdmin) return null;
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("La imagen excede los 5MB permitidos.");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const url = await EventService.uploadImage(file);
+      setNewEvent({ ...newEvent, imageUrl: url });
+    } catch (err) {
+      console.error("Upload error", err);
+      alert("Error al subir la imagen");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsAddingMode(false);
+    setEditingEventId(null);
+    setNewEvent({
+      title: '',
+      description: '',
+      date: new Date(),
+      location: '',
+      category: '',
+      imageUrl: '',
+      isFeatured: false
+    });
+  };
+
+  const handleStartEdit = (event: EventEntity) => {
+    setEditingEventId(event.id || null);
+    setNewEvent({
+      title: event.title,
+      description: event.description,
+      date: event.date,
+      location: event.location,
+      category: event.category,
+      imageUrl: event.imageUrl || '',
+      isFeatured: !!event.isFeatured
+    });
+    setIsAddingMode(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await EventService.addEvent(newEvent);
+      if (editingEventId) {
+        await EventService.updateEvent(editingEventId, newEvent);
+      } else {
+        await EventService.addEvent(newEvent);
+      }
       setNewEvent({
         title: '',
         description: '',
@@ -56,6 +126,7 @@ export const AdminPanel: React.FC = () => {
         imageUrl: '',
         isFeatured: false
       });
+      setEditingEventId(null);
       setIsAddingMode(false);
     } catch (err) {
       console.error(err);
@@ -108,7 +179,19 @@ export const AdminPanel: React.FC = () => {
               Nueva Categoría
             </button>
             <button 
-              onClick={() => setIsAddingMode(true)}
+              onClick={() => {
+                setEditingEventId(null);
+                setNewEvent({
+                  title: '',
+                  description: '',
+                  date: new Date(),
+                  location: '',
+                  category: '',
+                  imageUrl: '',
+                  isFeatured: false
+                });
+                setIsAddingMode(true);
+              }}
               className="btn-cultural btn-primary"
             >
               <Plus size={18} />
@@ -146,8 +229,16 @@ export const AdminPanel: React.FC = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <button 
+                        onClick={() => handleStartEdit(event)}
+                        className="p-2 text-neutral-400 hover:text-brand-blue transition-colors"
+                        title="Editar Evento"
+                      >
+                        <Edit3 size={18} />
+                      </button>
+                      <button 
                         onClick={() => handleDelete(event.id!)}
                         className="p-2 text-neutral-400 hover:text-red-500 transition-colors"
+                        title="Eliminar Evento"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -171,19 +262,23 @@ export const AdminPanel: React.FC = () => {
               <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm"
-                onClick={() => setIsAddingMode(false)}
+                onClick={handleCloseModal}
               />
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white rounded-[40px] w-full max-w-2xl overflow-hidden shadow-2xl relative z-10"
+                className="bg-white rounded-3xl sm:rounded-[40px] w-full max-w-2xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl relative z-10"
               >
-                <div className="p-10">
+                <div className="p-6 sm:p-8 md:p-10">
                   <div className="flex justify-between items-start mb-8">
                     <div>
-                      <h3 className="text-3xl font-serif italic text-neutral-800">Publicar Evento</h3>
-                      <p className="text-sm text-neutral-500">Completa la información para la cartelera 2026</p>
+                      <h3 className="text-3xl font-serif italic text-neutral-800">
+                        {editingEventId ? 'Actualizar Evento' : 'Publicar Evento'}
+                      </h3>
+                      <p className="text-sm text-neutral-500">
+                        {editingEventId ? 'Edita la información para la cartelera 2026' : 'Completa la información para la cartelera 2026'}
+                      </p>
                     </div>
-                    <button onClick={() => setIsAddingMode(false)} className="p-2 hover:bg-neutral-100 rounded-full transition-colors">
+                    <button onClick={handleCloseModal} className="p-2 hover:bg-neutral-100 rounded-full transition-colors">
                       <X size={20} />
                     </button>
                   </div>
@@ -233,6 +328,7 @@ export const AdminPanel: React.FC = () => {
                           required
                           type="datetime-local"
                           className="w-full px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
+                          value={newEvent.date ? formatLocalDateTime(newEvent.date) : ''}
                           onChange={e => setNewEvent({...newEvent, date: new Date(e.target.value)})}
                         />
                       </div>
@@ -247,19 +343,74 @@ export const AdminPanel: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">URL de Imagen</label>
+                    <div className="space-y-4">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">Imagen del Evento</label>
+                      
+                      <div className="flex flex-col md:flex-row gap-6">
+                        {/* File Upload Area */}
+                        <div className="flex-grow">
+                          <div className="relative group cursor-pointer">
+                            <input 
+                              type="file" 
+                              accept="image/*"
+                              onChange={handleFileChange}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            />
+                            <div className="border-2 border-dashed border-neutral-200 group-hover:border-brand-blue rounded-3xl p-8 flex flex-col items-center justify-center gap-3 transition-colors bg-neutral-50/50">
+                              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-neutral-400 group-hover:text-brand-blue shadow-sm">
+                                {isUploading ? (
+                                  <div className="w-5 h-5 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Plus size={24} />
+                                )}
+                              </div>
+                              <div className="text-center">
+                                <p className="text-sm font-medium text-neutral-600">
+                                  {isUploading ? 'Subiendo imagen...' : 'Seleccionar Imagen'}
+                                </p>
+                                <p className="text-[10px] text-neutral-400">PNG, JPG hasta 5MB</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Preview Area */}
+                        <div className="w-full md:w-48 shrink-0">
+                          <div className="aspect-video md:aspect-square bg-neutral-100 rounded-3xl overflow-hidden border border-neutral-100 relative group">
+                            {newEvent.imageUrl ? (
+                              <>
+                                <img src={newEvent.imageUrl} className="w-full h-full object-cover" />
+                                <button 
+                                  type="button"
+                                  onClick={() => setNewEvent({...newEvent, imageUrl: ''})}
+                                  className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-neutral-300">
+                                <ImageIcon size={32} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="h-px bg-neutral-100 flex-grow" />
+                        <span className="text-[9px] uppercase tracking-widest font-bold text-neutral-400">o usa un enlace externo</span>
+                        <div className="h-px bg-neutral-100 flex-grow" />
+                      </div>
+
                       <div className="flex gap-2">
                         <input 
-                          type="url"
-                          placeholder="https://..."
-                          className="w-full px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
-                          value={newEvent.imageUrl}
-                          onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})}
+                           type="url"
+                           placeholder="https://..."
+                           className="w-full px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue"
+                           value={newEvent.imageUrl}
+                           onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})}
                         />
-                        <div className="w-12 h-12 bg-neutral-100 rounded-2xl flex items-center justify-center text-neutral-400">
-                          <ImageIcon size={20} />
-                        </div>
                       </div>
                     </div>
 
@@ -280,12 +431,12 @@ export const AdminPanel: React.FC = () => {
                         disabled={isSubmitting}
                         className="flex-grow btn-cultural btn-primary disabled:opacity-50"
                       >
-                        {isSubmitting ? 'Publicando...' : 'Publicar Evento'}
+                        {isSubmitting ? (editingEventId ? 'Actualizando...' : 'Publicando...') : (editingEventId ? 'Actualizar Evento' : 'Publicar Evento')}
                         <Save size={18} />
                       </button>
                       <button 
                         type="button"
-                        onClick={() => setIsAddingMode(false)}
+                        onClick={handleCloseModal}
                         className="btn-cultural btn-outline"
                       >
                         Cancelar
