@@ -117,7 +117,7 @@ export const Hero: React.FC = () => {
 {/* Imagen de fondo */}
 <div className="absolute inset-0 -z-20">
   <img
-    src="/images/tehuipango-fondo.jpg"
+    src="/images/tehuipango-fondo.png"
     alt="Vista de Tehuipango"
     className="w-full h-full object-cover"
   />
