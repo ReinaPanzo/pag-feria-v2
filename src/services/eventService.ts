@@ -13,7 +13,8 @@ import {
   setDoc,
   Timestamp
 } from 'firebase/firestore';
-import { db, auth } from '@/src/lib/firebase';
+import { db, auth, storage } from '@/src/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export enum OperationType {
   CREATE = 'create',
@@ -154,6 +155,12 @@ export const EventService = {
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, path);
     }
+  },
+
+  async uploadImage(file: File): Promise<string> {
+    const storageRef = ref(storage, `events/${Date.now()}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return getDownloadURL(snapshot.ref);
   }
 };
 
